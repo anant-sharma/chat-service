@@ -1,6 +1,6 @@
 import { MESSAGE_TYPE } from "../../constants";
+import { SSO } from "../../third-party/sso";
 import { IGeo, IMedia, IMessage, IText, IUserAction } from "../../types";
-import { JWT } from "../../utilities/jwt";
 import { Messenger } from "./messenger";
 
 export class User {
@@ -16,9 +16,9 @@ export class User {
       return "test-user";
     }
 
-    const jwtPayload = await JWT.decode(this.socket.handshake?.auth?.token);
-    this.userId = jwtPayload?.userId;
-    return jwtPayload?.userId;
+    const token = this.socket.handshake?.auth?.token;
+    const user = await SSO.GetUser(token);
+    return user.Email;
   }
 
   async establishExchange() {

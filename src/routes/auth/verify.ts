@@ -11,21 +11,12 @@ export const authVerify = async (
   next?: express.NextFunction
 ) => {
   try {
-    let token: string | null = null;
-
     if (req.query?.isDebug) {
       next && next();
       return;
     }
 
-    if (
-      req.headers?.authorization &&
-      req.headers?.authorization.split(" ")[0] === "Bearer"
-    ) {
-      token = req.headers?.authorization.split(" ")[1];
-    } else if (req.query && req.query.token) {
-      token = req.query.token;
-    }
+    const token = extractToken(req);
 
     if (!token) {
       return res.status(401).send({
@@ -48,4 +39,19 @@ export const authVerify = async (
       status: "error",
     });
   }
+};
+
+export const extractToken = (req: express.Request): string | null => {
+  let token: string | null = null;
+
+  if (
+    req.headers?.authorization &&
+    req.headers?.authorization.split(" ")[0] === "Bearer"
+  ) {
+    token = req.headers?.authorization.split(" ")[1];
+  } else if (req.query && req.query.token) {
+    token = req.query.token as string;
+  }
+
+  return token;
 };

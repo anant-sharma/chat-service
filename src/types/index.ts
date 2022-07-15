@@ -1,3 +1,5 @@
+import { JwtPayload } from "jsonwebtoken";
+
 export interface IMessage<T> {
   Identifier: string;
   Type: string;
@@ -41,6 +43,8 @@ export interface IAllLastInteractions {
   UserId: string;
   Messages: IMessage<any>[];
   UnreadCount: number;
+  AvatarURL?: string;
+  Name?: string;
 }
 
 export interface IFile {
@@ -53,3 +57,27 @@ export interface IUser {
   name: string;
   deviceToken: string;
 }
+
+export interface JWTPayload extends JwtPayload {
+  payload: {
+    uid: string;
+  };
+}
+
+export type UserInfo = {
+  ID: string;
+  Name: string;
+  Email: string;
+  RawData: {
+    email: string;
+    id: string;
+    picture: string;
+    verified_email: boolean;
+  };
+  Provider: string;
+  FirstName: string;
+  LastName: string;
+  NickName: string;
+  AvatarURL: string;
+  Location: string;
+};

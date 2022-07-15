@@ -4,6 +4,8 @@
 import express from "express";
 import { MessageController } from "../../controllers/Message";
 import { Server as SocketServer } from "../../controllers/Socket";
+import { SSO } from "../../third-party/sso";
+import { extractToken } from "../auth/verify";
 
 /**
  * Initialize Router
@@ -25,122 +27,99 @@ router.post(
       }
 
       res.status(200).json({
-        status: true,
-        message: "",
         data: availabilityMap,
       });
     } catch (e) {
       res.status(400).json({
-        status: false,
         message: e,
-        data: {},
       });
     }
   }
 );
 
 router.get(
-  "/:user/interactions",
+  "/interactions",
   async (req: express.Request, res: express.Response) => {
-    const { user = "" } = req.params;
     const { limit = 1 } = req.query;
+    const token = extractToken(req) ?? "";
+    const user = await SSO.GetUser(token);
 
     try {
       const lastInteractions = await MessageController.GetAllLastInteractions(
-        user,
+        user.Email,
+        token,
         +limit
       );
 
       res.status(200).json({
-        status: true,
-        message: "",
         data: lastInteractions,
       });
     } catch (e) {
+      console.error(e);
       res.status(400).json({
-        status: false,
         message: e,
-        data: [],
       });
     }
   }
 );
 
 router.get(
-  "/:sender/messages/:recipient",
+  "/messages/:recipient",
   async (req: express.Request, res: express.Response) => {
-    const { sender, recipient } = req.params;
+    const user = await SSO.GetUser(extractToken(req) ?? "");
+    const { recipient } = req.params;
 
     const { page = 1, limit = 10 }: Partial<{ page: number; limit: number }> =
       req.query;
 
     try {
       const messages = await MessageController.Get({
-        sender,
+        sender: user.Email,
         recipient,
         page,
         limit,
       });
       res.status(200).json({
-        status: true,
-        message: "",
         data: messages,
       });
     } catch (e) {
       res.status(400).json({
-        status: false,
         message: e,
-        data: [],
       });
     }
   }
 );
 
 router.delete(
-  "/:sender/messages",
+  "/messages",
   async (req: express.Request, res: express.Response) => {
-    const { sender = "" } = req.params;
+    const user = await SSO.GetUser(extractToken(req) ?? "");
 
     const { Identifiers = [] }: { Identifiers: string[] } = req.body;
 
     try {
-      await MessageController.BulkDelete(sender, Identifiers);
-      res.status(200).json({
-        status: true,
-        message: "",
-        data: {},
-      });
+      await MessageController.BulkDelete(user.Email, Identifiers);
+      res.status(200).json({});
     } catch (e) {
       res.status(400).json({
-        status: false,
         message: e,
-        data: {},
       });
     }
   }
 );
 
-router.delete(
-  "/:user/all",
-  async (req: express.Request, res: express.Response) => {
-    const { user = "" } = req.params;
+router.delete("/all", async (req: express.Request, res: express.Response) => {
+  const user = await SSO.GetUser(extractToken(req) ?? "");
 
-    try {
-      await MessageController.DeleteAll(user);
-      res.status(200).json({
-        status: true,
-        message: "",
-        data: {},
-      });
-    } catch (e) {
-      res.status(400).json({
-        status: false,
-        message: e,
-        data: null,
-      });
-    }
+  try {
+    await MessageController.DeleteAll(user.Email);
+    res.status(200).json({});
+  } catch (e) {
+    res.status(400).json({
+      message: e,
+    });
   }
-);
+});
 
 router.post(
   "/:user/interactions/add",
@@ -157,25 +136,22 @@ router.post(
       });
 
       res.status(200).json({
-        status: true,
-        message: "",
         data: newMessage,
       });
     } catch (e) {
       res.status(400).json({
-        status: false,
         message: e,
-        data: {},
       });
     }
   }
 );
 
 router.post(
-  "/:user/events/:event",
+  "/events/:event",
   async (req: express.Request, res: express.Response) => {
     try {
-      const From = req.params.user || "";
+      const user = await SSO.GetUser(extractToken(req) ?? "");
+      const From = user.Email;
       const Type = req.params.event || "";
       const newMessage = await MessageController.MarkUserAction({
         ...req.body,
@@ -184,19 +160,32 @@ router.post(
       });
 
       res.status(200).json({
-        status: true,
-        message: "",
         data: newMessage,
       });
     } catch (e) {
       res.status(400).json({
-        status: false,
         message: e,
-        data: {},
       });
     }
   }
 );
+
+router.get("/:id/info", async (req: express.Request, res: express.Response) => {
+  try {
+    const user = await SSO.GetUserInfo(req.params.id, extractToken(req) ?? "");
+    res.status(200).json({
+      data: {
+        Name: user.Name,
+        Email: user.Email,
+        AvatarURL: user.AvatarURL,
+      },
+    });
+  } catch (e) {
+    res.status(400).json({
+      message: e,
+    });
+  }
+});
 
 /**
  * Export Module

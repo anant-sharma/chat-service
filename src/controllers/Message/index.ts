@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
-import { MESSAGE_STATUS } from "../../constants";
+import { MESSAGE_STATUS, MESSAGE_TYPE } from "../../constants";
 import { MessageModel } from "../../models/message";
+import { SSO } from "../../third-party/sso";
 import {
   IAllLastInteractions,
   IControllerData,
@@ -9,6 +10,7 @@ import {
   IMessage,
   IText,
   IUserAction,
+  UserInfo,
 } from "../../types";
 import { Server } from "../Socket";
 
@@ -28,20 +30,25 @@ export class MessageController {
       .skip((+page - 1) * limit)
       .limit(+limit);
 
-    return messages.map((m) => ({
-      Identifier: m.Identifier,
-      From: m.From,
-      To: m.To,
-      Data: m.Data,
-      Type: m.Type,
-      Status: m.Status,
-      Timestamp: m.Timestamp,
-      DeletedBy: m.DeletedBy,
-    }));
+    return messages
+      .map((m) => ({
+        Identifier: m.Identifier,
+        From: m.From,
+        To: m.To,
+        Data: m.Data,
+        Type: m.Type,
+        Status: m.Status,
+        Timestamp: m.Timestamp,
+        DeletedBy: m.DeletedBy,
+      }))
+      .sort((a, b) => {
+        return new Date(a.Timestamp) < new Date(b.Timestamp) ? -1 : 1;
+      });
   }
 
   public static async GetAllLastInteractions(
     user: string = "",
+    token: string,
     limit: number = 1
   ): Promise<(IAllLastInteractions | null)[]> {
     const messages = await MessageModel.find({
@@ -50,6 +57,17 @@ export class MessageController {
     })
       .sort({ Timestamp: -1 })
       .exec();
+
+    if (!messages.length) {
+      const welcomeMessage = await MessageController.AddInteraction<IText>({
+        From: "messenger@chipserver.in",
+        To: user,
+        Type: MESSAGE_TYPE.TEXT,
+        Data: "Welcome to Chipserver Messenger!!",
+      });
+
+      messages.push(welcomeMessage as any);
+    }
 
     const lastInteractionsMap = messages.reduce(
       (result: { [key: string]: IAllLastInteractions }, message) => {
@@ -70,7 +88,7 @@ export class MessageController {
       {}
     );
 
-    return Object.keys(lastInteractionsMap)
+    const lastInteractions = Object.keys(lastInteractionsMap)
       .map((key: string) => {
         const value: IAllLastInteractions | undefined =
           lastInteractionsMap[key];
@@ -95,6 +113,24 @@ export class MessageController {
         return value;
       })
       .filter((x) => x !== null);
+
+    const usersInfo: UserInfo[] = await Promise.all(
+      lastInteractions.map((li) => SSO.GetUserInfo(li?.UserId as string, token))
+    );
+    const usersInfoMap = usersInfo.reduce<{ [key: string]: UserInfo }>(
+      (result, user) => {
+        result[user.Email] = user;
+        return result;
+      },
+      {}
+    );
+    return lastInteractions.map((li) => ({
+      UserId: li?.UserId ?? "",
+      Messages: li?.Messages ?? [],
+      UnreadCount: li?.UnreadCount ?? 0,
+      AvatarURL: usersInfoMap[li?.UserId as string].AvatarURL as string,
+      Name: usersInfoMap[li?.UserId as string].Name as string,
+    }));
   }
 
   public static async BulkDelete(
